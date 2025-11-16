@@ -48,7 +48,119 @@ def on_connect(client, userdata, flags, rc):
     else:
         log(f"Error conectando al MQTT: {rc}", "ERROR")
 
+def on_message(client, userdata, msg):
+    """Callback cuando llega un mensaje MQTT"""
+    global device_data
+    
+    try:
+        topic = msg.topic
+        data = json.loads(msg.payload.decode())
+        
+        log(f"Mensaje de {topic}: {msg.payload.decode()}")
+        
+        # Actualizar datos del dispositivo
+        if topic == TOPIC_STATUS:
+            device_data.update({
+                "online": True,
+                "relay_state": data.get("relay_state", False),
+                "led_state": data.get("led_state", False),
+                "wifi_rssi": data.get("wifi_rssi", 0),
+                "last_seen": datetime.now()
+            })
+            
+        elif topic == TOPIC_TELEMETRY:
+            device_data["soil_moisture"] = data.get("soil_moisture", 0.0)
+            
+        # Mostrar estado actual
+        show_device_status()
+        
+    except Exception as e:
+        log(f"Error procesando mensaje: {e}", "ERROR")
 
+def send_command(action, soil_moisture=25.0):
+    """Enviar comando al ESP32"""
+    try:
+        command = {
+            "action": action,
+            "soil_moisture": soil_moisture,
+            "timestamp": int(time.time() * 1000),
+            "source": "python-edge-app"
+        }
+        
+        client.publish(TOPIC_COMMANDS, json.dumps(command))
+        log(f"Comando enviado: {action.upper()}")
+        
+    except Exception as e:
+        log(f"Error enviando comando: {e}", "ERROR")
+
+
+    """Menú interactivo para controlar el dispositivo"""
+    while True:
+        print("\nCONTROLES AGROPAPIN:")
+        print("1.Iniciar Riego")
+        print("2.Detener Riego") 
+        print("3.Ver Estado")
+        print("4.Salir")
+        
+        try:
+            choice = input("\nSelecciona una opción (1-4): ").strip()
+            
+            if choice == "1":
+                moisture = input("Humedad del suelo (default 20%): ").strip()
+                moisture = float(moisture) if moisture else 20.0
+                send_command("irrigate", moisture)
+                
+            elif choice == "2":
+                send_command("stop", 50.0)
+                
+            elif choice == "3":
+                show_device_status()
+                
+            elif choice == "4":
+                log("Cerrando aplicación...")
+                break
+                
+            else:
+                print("Opción inválida")
+                
+        except KeyboardInterrupt:
+            log("\nCerrando aplicación...")
+            break
+        except Exception as e:
+            log(f"Error: {e}", "ERROR")
+
+def main():
+    """Función principal"""
+    global client
+    
+    log("Iniciando AgroPapin Edge App (Python)")
+    log(f"Conectando a MQTT Broker: {MQTT_BROKER}:{MQTT_PORT}")
+    
+    # Configurar cliente MQTT
+    client = mqtt.Client()
+    client.on_connect = on_connect
+    client.on_message = on_message
+    
+    try:
+        # Conectar al broker
+        client.connect(MQTT_BROKER, MQTT_PORT, 60)
+        
+        # Iniciar loop de MQTT en hilo separado
+        client.loop_start()
+        
+        # Esperar un poco para establecer conexión
+        time.sleep(2)
+        
+        # Iniciar menú interactivo
+        interactive_menu()
+        
+    except Exception as e:
+        log(f"Error fatal: {e}", "ERROR")
+        
+    finally:
+        client.loop_stop()
+        client.disconnect()
+        log("Aplicación terminada")
 
 if __name__ == "__main__":
     main()
