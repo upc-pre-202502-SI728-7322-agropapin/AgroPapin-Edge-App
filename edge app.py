@@ -93,7 +93,23 @@ def send_command(action, soil_moisture=25.0):
     except Exception as e:
         log(f"Error enviando comando: {e}", "ERROR")
 
+def show_device_status():
+    """Mostrar estado actual del dispositivo"""
+    print("\n" + "="*50)
+    print("📱 ESTADO DEL DISPOSITIVO AGROPAPIN")
+    print("="*50)
+    print(f"Online: {'SÍ' if device_data['online'] else '❌ NO'}")
+    print(f"Riego: {'ACTIVO' if device_data['relay_state'] else '🔴 INACTIVO'}")
+    print(f"LED: {'ON' if device_data['led_state'] else '⚫ OFF'}")
+    print(f"Humedad: {device_data['soil_moisture']:.1f}%")
+    print(f"WiFi: {device_data['wifi_rssi']} dBm")
+    
+    if device_data['last_seen']:
+        print(f"Última vez visto: {device_data['last_seen'].strftime('%H:%M:%S')}")
+    
+    print("="*50)
 
+def interactive_menu():
     """Menú interactivo para controlar el dispositivo"""
     while True:
         print("\nCONTROLES AGROPAPIN:")
