@@ -61,16 +61,18 @@ def on_message(client, userdata, msg):
         # Actualizar datos del dispositivo
         if topic == TOPIC_STATUS:
             device_data.update({
-                "online": True,
+                "status": data.get("status", "offline"),
+                "Irrigation": data.get("Irrigation", False),
                 "relay_state": data.get("relay_state", False),
                 "led_state": data.get("led_state", False),
                 "wifi_rssi": data.get("wifi_rssi", 0),
                 "last_seen": datetime.now()
             })
+            DEVICE_ID = data.get("device_id", "n/a")
             
         elif topic == TOPIC_TELEMETRY:
             device_data["soil_moisture"] = data.get("soil_moisture", 0.0)
-            device_data["device_id"] = DEVICE_ID
+            DEVICE_ID = data.get("device_id", DEVICE_ID)
             device_data["timestamp"] = data.get("timestamp")
             device_data["temperature"] = data.get("temperature")
             device_data["soil_moisture"] = data.get("soil_moisture")
@@ -78,16 +80,16 @@ def on_message(client, userdata, msg):
             device_data["humidity_limit"] = data.get("humidity_limit")
             device_data["salinity"] = data.get("salinity")
             device_data["passed_temperature"] = data.get("passed_temperature")
-            device_data["passed_humidity"] = data.get("passed_humidity")        
+            device_data["passed_humidity"] = data.get("passed_humidity")
+
     except Exception as e:
         log(f"Error procesando mensaje: {e}", "ERROR")
 
-def send_command(action, soil_moisture=25.0):
+def send_command(action):
     """Enviar comando al ESP32"""
     try:
         command = {
             "action": action,
-            "soil_moisture": soil_moisture,
             "timestamp": int(time.time() * 1000),
             "source": "python-edge-app"
         }
@@ -104,8 +106,8 @@ def show_device_status():
     print("📱 ESTADO DEL DISPOSITIVO AGROPAPIN")
     print("="*50)
     print(f"Dispositivo: {device_data.get('device_id', DEVICE_ID)}")
-    print(f"Online: {'SÍ' if device_data['online'] else '❌ NO'}")
-    print(f"Riego: {'ACTIVO' if device_data['relay_state'] else '🔴 INACTIVO'}")
+    print(f"Online: {'✅ SÍ' if device_data['status'] else '❌ NO'}")
+    print(f"Riego: {'🟢 ACTIVO' if device_data['relay_state'] else '🔴 INACTIVO'}")
     
     if device_data['last_seen']:
         print(f"Última vez visto: {device_data['last_seen'].strftime('%H:%M:%S')}")
@@ -142,12 +144,10 @@ def interactive_menu():
             choice = input("\nSelecciona una opción (1-5): ").strip()
             
             if choice == "1":
-                moisture = input("Humedad del suelo (default 20%): ").strip()
-                moisture = float(moisture) if moisture else 20.0
-                send_command("irrigate", moisture)
+                send_command("irrigate")
                 
             elif choice == "2":
-                send_command("stop", 50.0)
+                send_command("stop")
                 
             elif choice == "3":
                 show_device_status()
