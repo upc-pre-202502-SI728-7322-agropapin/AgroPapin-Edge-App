@@ -10,7 +10,7 @@ import time
 from datetime import datetime
 import threading
 
-MQTT_BROKER = "10.183.161.1"
+MQTT_BROKER = "test.mosquitto.org"
 MQTT_PORT = 1883
 DEVICE_ID = "agro-papin-001"
 
@@ -56,7 +56,7 @@ def on_message(client, userdata, msg):
         topic = msg.topic
         data = json.loads(msg.payload.decode())
         
-        log(f"Mensaje de {topic}: {msg.payload.decode()}")
+        #log(f"Mensaje de {topic}: {msg.payload.decode()}")
         
         # Actualizar datos del dispositivo
         if topic == TOPIC_STATUS:
@@ -70,10 +70,15 @@ def on_message(client, userdata, msg):
             
         elif topic == TOPIC_TELEMETRY:
             device_data["soil_moisture"] = data.get("soil_moisture", 0.0)
-            
-        # Mostrar estado actual
-        show_device_status()
-        
+            device_data["device_id"] = DEVICE_ID
+            device_data["timestamp"] = data.get("timestamp")
+            device_data["temperature"] = data.get("temperature")
+            device_data["soil_moisture"] = data.get("soil_moisture")
+            device_data["temperature_limit"] = data.get("temperature_limit")
+            device_data["humidity_limit"] = data.get("humidity_limit")
+            device_data["salinity"] = data.get("salinity")
+            device_data["passed_temperature"] = data.get("passed_temperature")
+            device_data["passed_humidity"] = data.get("passed_humidity")        
     except Exception as e:
         log(f"Error procesando mensaje: {e}", "ERROR")
 
@@ -98,15 +103,29 @@ def show_device_status():
     print("\n" + "="*50)
     print("📱 ESTADO DEL DISPOSITIVO AGROPAPIN")
     print("="*50)
+    print(f"Dispositivo: {device_data.get('device_id', DEVICE_ID)}")
     print(f"Online: {'SÍ' if device_data['online'] else '❌ NO'}")
     print(f"Riego: {'ACTIVO' if device_data['relay_state'] else '🔴 INACTIVO'}")
-    print(f"LED: {'ON' if device_data['led_state'] else '⚫ OFF'}")
-    print(f"Humedad: {device_data['soil_moisture']:.1f}%")
-    print(f"WiFi: {device_data['wifi_rssi']} dBm")
     
     if device_data['last_seen']:
         print(f"Última vez visto: {device_data['last_seen'].strftime('%H:%M:%S')}")
     
+    print("="*50)
+
+def show_telemetry():
+    """Mostrar datos de telemetría"""
+    print("\n" + "="*50)
+    print("🌡️ TELEMETRÍA DEL DISPOSITIVO AGROPAPIN")
+    print("="*50)
+    print(f"Dispositivo: {device_data.get('device_id', DEVICE_ID)}")
+    print(f"Timestamp: {device_data.get('timestamp', 'N/A')}")
+    print(f"Temperatura: {device_data.get('temperature', 'N/A')} °C")
+    print(f"Humedad del suelo: {device_data.get('soil_moisture', 'N/A')} %")
+    print(f"Límite de temperatura: {device_data.get('temperature_limit', 'N/A')} °C")
+    print(f"Límite de humedad: {device_data.get('humidity_limit', 'N/A')} %")
+    print(f"Salinidad: {device_data.get('salinity', 'N/A')} ppt")
+    print(f"Superó límite de temperatura: {'SÍ' if device_data.get('passed_temperature') else 'NO'}")
+    print(f"Superó límite de humedad: {'SÍ' if device_data.get('passed_humidity') else 'NO'}")
     print("="*50)
 
 def interactive_menu():
@@ -116,10 +135,11 @@ def interactive_menu():
         print("1.Iniciar Riego")
         print("2.Detener Riego") 
         print("3.Ver Estado")
-        print("4.Salir")
+        print("4.Ver Telemetría")
+        print("5.Salir")
         
         try:
-            choice = input("\nSelecciona una opción (1-4): ").strip()
+            choice = input("\nSelecciona una opción (1-5): ").strip()
             
             if choice == "1":
                 moisture = input("Humedad del suelo (default 20%): ").strip()
@@ -133,9 +153,11 @@ def interactive_menu():
                 show_device_status()
                 
             elif choice == "4":
+                show_telemetry()
+
+            elif choice == "5":
                 log("Cerrando aplicación...")
                 break
-                
             else:
                 print("Opción inválida")
                 
