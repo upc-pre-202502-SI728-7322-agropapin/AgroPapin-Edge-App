@@ -10,7 +10,7 @@ import time
 from datetime import datetime
 import threading
 
-MQTT_BROKER = "192.168.100.7"
+MQTT_BROKER = "10.183.161.1"
 MQTT_PORT = 1883
 DEVICE_ID = "agro-papin-001"
 
