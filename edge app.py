@@ -1,17 +1,13 @@
-#!/usr/bin/env python3
-"""
-AgroPapin Edge App - Versión Simple
-Conecta con ESP32 via MQTT para control de riego
-"""
-
 import paho.mqtt.client as mqtt
 import json
 import time
 from datetime import datetime
 import threading
+import telemetry_aggregator as ta
 
 MQTT_BROKER = "test.mosquitto.org"
 MQTT_PORT = 1883
+global DEVICE_ID
 DEVICE_ID = "agro-papin-001"
 
 # Topics MQTT
@@ -49,8 +45,8 @@ def on_connect(client, userdata, flags, rc):
         log(f"Error conectando al MQTT: {rc}", "ERROR")
 
 def on_message(client, userdata, msg):
-    """Callback cuando llega un mensaje MQTT"""
     global device_data
+    global DEVICE_ID
     
     try:
         topic = msg.topic
@@ -71,8 +67,7 @@ def on_message(client, userdata, msg):
             DEVICE_ID = data.get("device_id", "n/a")
             
         elif topic == TOPIC_TELEMETRY:
-            device_data["soil_moisture"] = data.get("soil_moisture", 0.0)
-            DEVICE_ID = data.get("device_id", DEVICE_ID)
+            # Actualizar datos visibles
             device_data["timestamp"] = data.get("timestamp")
             device_data["temperature"] = data.get("temperature")
             device_data["soil_moisture"] = data.get("soil_moisture")
@@ -81,6 +76,21 @@ def on_message(client, userdata, msg):
             device_data["salinity"] = data.get("salinity")
             device_data["passed_temperature"] = data.get("passed_temperature")
             device_data["passed_humidity"] = data.get("passed_humidity")
+            device_data["humidity"] = data.get("humidity")
+
+            # Enviar muestra al agregador simple (conteo por muestras)
+            try:
+                ts = device_data.get("timestamp") or int(time.time())
+                sample = {
+                    "device_id": data.get("device_id", DEVICE_ID),
+                    "timestamp": int(ts),
+                    "Humidity": ta._safe_float(device_data.get("humidity")),
+                    "temperature": ta._safe_float(device_data.get("temperature")),
+                    "salinity": ta._safe_float(device_data.get("salinity")),
+                }
+                ta.add_sample(sample)
+            except Exception as e:
+                log(f"Error procesando y agregando muestra: {e}", "ERROR")
 
     except Exception as e:
         log(f"Error procesando mensaje: {e}", "ERROR")
@@ -122,7 +132,7 @@ def show_telemetry():
     print(f"Dispositivo: {device_data.get('device_id', DEVICE_ID)}")
     print(f"Timestamp: {device_data.get('timestamp', 'N/A')}")
     print(f"Temperatura: {device_data.get('temperature', 'N/A')} °C")
-    print(f"Humedad del suelo: {device_data.get('soil_moisture', 'N/A')} %")
+    print(f"Humedad del suelo: {device_data.get('humidity', 'N/A')} %")
     print(f"Límite de temperatura: {device_data.get('temperature_limit', 'N/A')} °C")
     print(f"Límite de humedad: {device_data.get('humidity_limit', 'N/A')} %")
     print(f"Salinidad: {device_data.get('salinity', 'N/A')} ppt")
