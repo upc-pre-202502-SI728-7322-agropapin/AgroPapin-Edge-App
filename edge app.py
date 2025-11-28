@@ -8,12 +8,13 @@ import telemetry_aggregator as ta
 MQTT_BROKER = "test.mosquitto.org"
 MQTT_PORT = 1883
 global DEVICE_ID
-DEVICE_ID = "agro-papin-001"
+DEVICE_ID = "n/a"
+MQTT_SERVER = "agro-papin-001"
 
 # Topics MQTT
-TOPIC_STATUS = f"agropapin/devices/{DEVICE_ID}/status"
-TOPIC_COMMANDS = f"agropapin/devices/{DEVICE_ID}/commands"
-TOPIC_TELEMETRY = f"agropapin/devices/{DEVICE_ID}/telemetry"
+TOPIC_STATUS = f"{MQTT_SERVER}/status"
+TOPIC_COMMANDS = f"{MQTT_SERVER}/commands"
+TOPIC_TELEMETRY = f"{MQTT_SERVER}/telemetry"
 
 # Variables globales
 device_data = {
@@ -69,6 +70,7 @@ def on_message(client, userdata, msg):
         elif topic == TOPIC_TELEMETRY:
             # Actualizar datos visibles
             device_data["timestamp"] = data.get("timestamp")
+            device_data["plot_id"] = "8d1982b6-12db-4745-9a3a-8a9a40cdb52a"
             device_data["temperature"] = data.get("temperature")
             device_data["soil_moisture"] = data.get("soil_moisture")
             device_data["temperature_limit"] = data.get("temperature_limit")
@@ -83,10 +85,11 @@ def on_message(client, userdata, msg):
                 ts = device_data.get("timestamp") or int(time.time())
                 sample = {
                     "device_id": data.get("device_id", DEVICE_ID),
+                    "plot_id": "8d1982b6-12db-4745-9a3a-8a9a40cdb52a",
                     "timestamp": int(ts),
                     "Humidity": ta._safe_float(device_data.get("humidity")),
                     "temperature": ta._safe_float(device_data.get("temperature")),
-                    "salinity": ta._safe_float(device_data.get("salinity")),
+                    "soilMoisture": ta._safe_float(device_data.get("soil_moisture")),
                 }
                 ta.add_sample(sample)
             except Exception as e:
@@ -111,6 +114,7 @@ def send_command(action):
         log(f"Error enviando comando: {e}", "ERROR")
 
 def show_device_status():
+    global DEVICE_ID
     """Mostrar estado actual del dispositivo"""
     print("\n" + "="*50)
     print("📱 ESTADO DEL DISPOSITIVO AGROPAPIN")
@@ -125,6 +129,7 @@ def show_device_status():
     print("="*50)
 
 def show_telemetry():
+    global DEVICE_ID
     """Mostrar datos de telemetría"""
     print("\n" + "="*50)
     print("🌡️ TELEMETRÍA DEL DISPOSITIVO AGROPAPIN")

@@ -1,10 +1,12 @@
 import os
 import requests
 from datetime import datetime
+import uuid
+import time
 
 # Configuración
-BACKEND_ENDPOINT = os.getenv("BACKEND_ENDPOINT", "http://localhost:8000/api/telemetry")
-SAMPLES_LIMIT = 10
+BACKEND_ENDPOINT = os.getenv("BACKEND_ENDPOINT", "http://localhost:8080/api/v1/telemetry/ingest-batch")
+SAMPLES_LIMIT = 6
 
 # Almacenamiento temporal
 _buffer = []
@@ -28,7 +30,14 @@ def add_sample(sample):
     if len(_buffer) >= SAMPLES_LIMIT:
         _process_and_send()
 
-        
+def _is_valid_uuid(val):
+    if not val or not isinstance(val, str):
+        return False
+    try:
+        uuid.UUID(val)
+        return True
+    except Exception:
+        return False
 
 def _process_and_send():
     global _buffer
@@ -54,14 +63,31 @@ def _process_and_send():
     start_ts = min(s["timestamp"] for s in _buffer)
     end_ts = max(s["timestamp"] for s in _buffer)
     device_id = _buffer[0].get("device_id", "unknown")
+    plot_id = _buffer[0].get("plot_id", "n/a")
 
-    payload = {
-        "device_id": device_id,
+    current_ts = int(time.time())
+
+    # Construir objeto base, SOLO incluir plotId/serialNumber si son UUID válidos
+    reading_resource = {
         "samples_count": len(_buffer),
-        "start_ts": start_ts,
-        "end_ts": end_ts,
-        "averages": averages
+        "timestamp": current_ts
     }
+
+    if _is_valid_uuid(plot_id):
+        reading_resource["plotId"] = plot_id
+    else:
+        print(f"Agregador: plotId inválido o ausente ('{plot_id}'), se omite del payload.")
+
+    if _is_valid_uuid(device_id):
+        reading_resource["serialNumber"] = device_id
+    else:
+        print(f"Agregador: device_id inválido o ausente ('{device_id}'), se omite del payload.")
+
+    # aplanar: agregar promedios al objeto raíz
+    reading_resource.update(averages)
+
+    # el backend espera una lista de objetos
+    payload = [reading_resource]
 
     print(f"Payload: {payload}")
 
