@@ -7,7 +7,6 @@ import time
 # Configuración
 BACKEND_ENDPOINT = os.getenv("BACKEND_ENDPOINT", "http://localhost:8080/api/v1/telemetry/ingest-batch")
 SAMPLES_LIMIT = 6
-
 # Almacenamiento temporal
 _buffer = []
 

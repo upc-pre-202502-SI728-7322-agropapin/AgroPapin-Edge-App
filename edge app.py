@@ -70,7 +70,7 @@ def on_message(client, userdata, msg):
         elif topic == TOPIC_TELEMETRY:
             # Actualizar datos visibles
             device_data["timestamp"] = data.get("timestamp")
-            device_data["plot_id"] = "8d1982b6-12db-4745-9a3a-8a9a40cdb52a"
+            device_data["plot_id"] = "6bb0cf7a-a9b1-4878-8809-0eb74487cbe0"
             device_data["temperature"] = data.get("temperature")
             device_data["soil_moisture"] = data.get("soil_moisture")
             device_data["temperature_limit"] = data.get("temperature_limit")
@@ -85,9 +85,9 @@ def on_message(client, userdata, msg):
                 ts = device_data.get("timestamp") or int(time.time())
                 sample = {
                     "device_id": data.get("device_id", DEVICE_ID),
-                    "plot_id": "8d1982b6-12db-4745-9a3a-8a9a40cdb52a",
+                    "plot_id": "d31cc3bc-df79-4926-af6d-49555ab893be",
                     "timestamp": int(ts),
-                    "Humidity": ta._safe_float(device_data.get("humidity")),
+                    "humidity": ta._safe_float(device_data.get("humidity")),
                     "temperature": ta._safe_float(device_data.get("temperature")),
                     "soilMoisture": ta._safe_float(device_data.get("soil_moisture")),
                 }
