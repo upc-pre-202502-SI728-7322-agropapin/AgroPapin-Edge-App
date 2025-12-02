@@ -15,6 +15,7 @@ MQTT_SERVER = "agro-papin-001"
 TOPIC_STATUS = f"{MQTT_SERVER}/status"
 TOPIC_COMMANDS = f"{MQTT_SERVER}/commands"
 TOPIC_TELEMETRY = f"{MQTT_SERVER}/telemetry"
+TOPIC_IRRIGATION = "command/irrigation/d1ff4b71-1cd0-4fc0-b0d2-d4e5b5825fba"
 
 # Variables globales
 device_data = {
@@ -39,11 +40,32 @@ def on_connect(client, userdata, flags, rc):
         # Suscribirse a topics del ESP32
         client.subscribe(TOPIC_STATUS)
         client.subscribe(TOPIC_TELEMETRY)
+        client.subscribe(TOPIC_IRRIGATION)
         log(f"Suscrito a: {TOPIC_STATUS}")
         log(f"Suscrito a: {TOPIC_TELEMETRY}")
+        log(f"Suscrito a: {TOPIC_IRRIGATION}")
         
     else:
         log(f"Error conectando al MQTT: {rc}", "ERROR")
+
+def handle_irrigation_command(duration_minutes):
+    """Inicia y detiene el riego por un tiempo determinado."""
+    try:
+        duration_seconds = duration_minutes * 60
+        log(f"Iniciando riego automático por {duration_minutes} minutos.")
+        
+        # 1. Enviar comando para iniciar riego
+        send_command("irrigate")
+        
+        # 2. Esperar el tiempo especificado
+        time.sleep(duration_seconds)
+        
+        # 3. Enviar comando para detener riego
+        send_command("stop")
+        log(f"Riego detenido automáticamente después de {duration_minutes} minutos.")
+        
+    except Exception as e:
+        log(f"Error durante el riego automático: {e}", "ERROR")
 
 def on_message(client, userdata, msg):
     global device_data
@@ -51,12 +73,12 @@ def on_message(client, userdata, msg):
     
     try:
         topic = msg.topic
-        data = json.loads(msg.payload.decode())
         
         #log(f"Mensaje de {topic}: {msg.payload.decode()}")
         
         # Actualizar datos del dispositivo
         if topic == TOPIC_STATUS:
+            data = json.loads(msg.payload.decode())
             device_data.update({
                 "status": data.get("status", "offline"),
                 "Irrigation": data.get("Irrigation", False),
@@ -68,6 +90,7 @@ def on_message(client, userdata, msg):
             DEVICE_ID = data.get("device_id", "n/a")
             
         elif topic == TOPIC_TELEMETRY:
+            data = json.loads(msg.payload.decode())
             # Actualizar datos visibles
             device_data["timestamp"] = data.get("timestamp")
             device_data["plot_id"] = "6bb0cf7a-a9b1-4878-8809-0eb74487cbe0"
@@ -94,6 +117,29 @@ def on_message(client, userdata, msg):
                 ta.add_sample(sample)
             except Exception as e:
                 log(f"Error procesando y agregando muestra: {e}", "ERROR")
+        elif topic == TOPIC_IRRIGATION:
+            log(f"Mensaje de riego recibido: {data}")
+            try:
+                # 1. Decodificar el payload de bytes a string (ej: b'2' -> '2')
+                payload_str = msg.payload.decode()
+                
+                # 2. Convertir el string a un número entero (ej: '2' -> 2)
+                duration_minutes = int(payload_str)
+                
+                log(f"Comando de riego recibido por {duration_minutes} minutos.")
+                
+                # 3. Ejecutar el riego en un hilo para no bloquear la aplicación
+                irrigation_thread = threading.Thread(target=handle_irrigation_command, args=(duration_minutes,))
+                irrigation_thread.start()
+
+            except ValueError:
+                log(f"Error: El payload de riego '{msg.payload.decode()}' no es un número válido.", "ERROR")
+            except Exception as e:
+                log(f"Error al procesar comando de riego: {e}", "ERROR")
+            
+            # Salimos de la función on_message para no intentar procesar esto como JSON más abajo
+            return
+
 
     except Exception as e:
         log(f"Error procesando mensaje: {e}", "ERROR")
