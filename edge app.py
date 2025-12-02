@@ -5,19 +5,21 @@ from datetime import datetime
 import threading
 import telemetry_aggregator as ta
 
+# --- Broker y Topics para Telemetría ---
 MQTT_BROKER = "test.mosquitto.org"
 MQTT_PORT = 1883
-global DEVICE_ID
-DEVICE_ID = "n/a"
 MQTT_SERVER = "agro-papin-001"
-
-# Topics MQTT
 TOPIC_STATUS = f"{MQTT_SERVER}/status"
 TOPIC_COMMANDS = f"{MQTT_SERVER}/commands"
 TOPIC_TELEMETRY = f"{MQTT_SERVER}/telemetry"
+
+# --- Broker y Topic para Riego ---
+IRRIGATION_BROKER = "38.253.147.228" # O la IP de tu otro broker
 TOPIC_IRRIGATION = "command/irrigation/d1ff4b71-1cd0-4fc0-b0d2-d4e5b5825fba"
 
-# Variables globales
+# --- Variables Globales ---
+global DEVICE_ID
+DEVICE_ID = "n/a"
 device_data = {
     "online": False,
     "relay_state": False,
@@ -26,59 +28,37 @@ device_data = {
     "wifi_rssi": 0,
     "last_seen": None
 }
+# Clientes MQTT globales para que send_command pueda acceder a ellos
+client1 = None
+client2 = None
 
 def log(message, level="INFO"):
     """Simple logging function"""
     timestamp = datetime.now().strftime("%H:%M:%S")
     print(f"[{timestamp}] {level}: {message}")
 
-def on_connect(client, userdata, flags, rc):
-    """Callback cuando se conecta al broker MQTT"""
+# --- Callbacks para Broker 1 (Telemetría y Estado) ---
+def on_connect_broker1(client, userdata, flags, rc):
+    """Callback cuando se conecta al broker MQTT principal"""
     if rc == 0:
-        log("Conectado al broker MQTT")
-        
-        # Suscribirse a topics del ESP32
+        log("[Broker 1] Conectado al broker principal")
         client.subscribe(TOPIC_STATUS)
         client.subscribe(TOPIC_TELEMETRY)
-        client.subscribe(TOPIC_IRRIGATION)
-        log(f"Suscrito a: {TOPIC_STATUS}")
-        log(f"Suscrito a: {TOPIC_TELEMETRY}")
-        log(f"Suscrito a: {TOPIC_IRRIGATION}")
-        
+        log(f"[Broker 1] Suscrito a: {TOPIC_STATUS}")
+        log(f"[Broker 1] Suscrito a: {TOPIC_TELEMETRY}")
     else:
-        log(f"Error conectando al MQTT: {rc}", "ERROR")
+        log(f"[Broker 1] Error conectando: {rc}", "ERROR")
 
-def handle_irrigation_command(duration_minutes):
-    """Inicia y detiene el riego por un tiempo determinado."""
-    try:
-        duration_seconds = duration_minutes * 60
-        log(f"Iniciando riego automático por {duration_minutes} minutos.")
-        
-        # 1. Enviar comando para iniciar riego
-        send_command("irrigate")
-        
-        # 2. Esperar el tiempo especificado
-        time.sleep(duration_seconds)
-        
-        # 3. Enviar comando para detener riego
-        send_command("stop")
-        log(f"Riego detenido automáticamente después de {duration_minutes} minutos.")
-        
-    except Exception as e:
-        log(f"Error durante el riego automático: {e}", "ERROR")
-
-def on_message(client, userdata, msg):
+def on_message_broker1(client, userdata, msg):
+    """Callback para mensajes del broker principal (JSON)"""
     global device_data
     global DEVICE_ID
     
     try:
         topic = msg.topic
-        
-        #log(f"Mensaje de {topic}: {msg.payload.decode()}")
-        
-        # Actualizar datos del dispositivo
+        data = json.loads(msg.payload.decode())
+
         if topic == TOPIC_STATUS:
-            data = json.loads(msg.payload.decode())
             device_data.update({
                 "status": data.get("status", "offline"),
                 "Irrigation": data.get("Irrigation", False),
@@ -90,8 +70,6 @@ def on_message(client, userdata, msg):
             DEVICE_ID = data.get("device_id", "n/a")
             
         elif topic == TOPIC_TELEMETRY:
-            data = json.loads(msg.payload.decode())
-            # Actualizar datos visibles
             device_data["timestamp"] = data.get("timestamp")
             device_data["plot_id"] = "6bb0cf7a-a9b1-4878-8809-0eb74487cbe0"
             device_data["temperature"] = data.get("temperature")
@@ -102,63 +80,80 @@ def on_message(client, userdata, msg):
             device_data["passed_temperature"] = data.get("passed_temperature")
             device_data["passed_humidity"] = data.get("passed_humidity")
             device_data["humidity"] = data.get("humidity")
-
-            # Enviar muestra al agregador simple (conteo por muestras)
             try:
                 ts = device_data.get("timestamp") or int(time.time())
                 sample = {
                     "device_id": data.get("device_id", DEVICE_ID),
                     "plot_id": "d31cc3bc-df79-4926-af6d-49555ab893be",
                     "timestamp": int(ts),
-                    "humidity": ta._safe_float(device_data.get("humidity")),
-                    "temperature": ta._safe_float(device_data.get("temperature")),
-                    "soilMoisture": ta._safe_float(device_data.get("soil_moisture")),
+                    "humidity": ta._safe_float(data.get("humidity")),
+                    "temperature": ta._safe_float(data.get("temperature")),
+                    "soilMoisture": ta._safe_float(data.get("soil_moisture")),
                 }
                 ta.add_sample(sample)
             except Exception as e:
                 log(f"Error procesando y agregando muestra: {e}", "ERROR")
-        elif topic == TOPIC_IRRIGATION:
-            log(f"Mensaje de riego recibido: {data}")
-            try:
-                # 1. Decodificar el payload de bytes a string (ej: b'2' -> '2')
-                payload_str = msg.payload.decode()
-                
-                # 2. Convertir el string a un número entero (ej: '2' -> 2)
-                duration_minutes = int(payload_str)
-                
-                log(f"Comando de riego recibido por {duration_minutes} minutos.")
-                
-                # 3. Ejecutar el riego en un hilo para no bloquear la aplicación
-                irrigation_thread = threading.Thread(target=handle_irrigation_command, args=(duration_minutes,))
-                irrigation_thread.start()
 
-            except ValueError:
-                log(f"Error: El payload de riego '{msg.payload.decode()}' no es un número válido.", "ERROR")
-            except Exception as e:
-                log(f"Error al procesar comando de riego: {e}", "ERROR")
-            
-            # Salimos de la función on_message para no intentar procesar esto como JSON más abajo
-            return
-
-
+    except json.JSONDecodeError:
+        log(f"[Broker 1] Error: El mensaje en el tópico '{msg.topic}' no es un JSON válido: {msg.payload.decode()}", "ERROR")
     except Exception as e:
-        log(f"Error procesando mensaje: {e}", "ERROR")
+        log(f"[Broker 1] Error procesando mensaje: {e}", "ERROR")
+
+# --- Callbacks para Broker 2 (Comandos de Riego) ---
+def on_connect_broker2(client, userdata, flags, rc):
+    """Callback cuando se conecta al broker de comandos de riego"""
+    if rc == 0:
+        log("[Broker 2] Conectado al broker de riego")
+        client.subscribe(TOPIC_IRRIGATION)
+        log(f"[Broker 2] Suscrito a: {TOPIC_IRRIGATION}")
+    else:
+        log(f"[Broker 2] Error conectando: {rc}", "ERROR")
+
+def on_message_broker2(client, userdata, msg):
+    """Callback para mensajes del broker de riego (Texto plano)"""
+    try:
+        duration_minutes = int(msg.payload.decode())
+        log(f"Comando de riego recibido por {duration_minutes} minutos.")
+        
+        irrigation_thread = threading.Thread(target=handle_irrigation_command, args=(duration_minutes,))
+        irrigation_thread.start()
+
+    except ValueError:
+        log(f"Error: El payload de riego '{msg.payload.decode()}' no es un número válido.", "ERROR")
+    except Exception as e:
+        log(f"Error al procesar comando de riego: {e}", "ERROR")
+
+# --- Funciones de Comando y Lógica ---
+def handle_irrigation_command(duration_minutes):
+    """Inicia y detiene el riego por un tiempo determinado."""
+    try:
+        duration_seconds = duration_minutes * 60
+        log(f"Iniciando riego automático por {duration_minutes} minutos.")
+        send_command("irrigate")
+        time.sleep(duration_seconds)
+        send_command("stop")
+        log(f"Riego detenido automáticamente después de {duration_minutes} minutos.")
+    except Exception as e:
+        log(f"Error durante el riego automático: {e}", "ERROR")
 
 def send_command(action):
-    """Enviar comando al ESP32"""
+    """Enviar comando al ESP32 (a través del broker principal)"""
+    global client1
     try:
         command = {
             "action": action,
             "timestamp": int(time.time() * 1000),
             "source": "python-edge-app"
         }
-        
-        client.publish(TOPIC_COMMANDS, json.dumps(command))
-        log(f"Comando enviado: {action.upper()}")
-        
+        if client1:
+            client1.publish(TOPIC_COMMANDS, json.dumps(command))
+            log(f"Comando enviado: {action.upper()}")
+        else:
+            log("Error: El cliente MQTT 1 no está conectado.", "ERROR")
     except Exception as e:
         log(f"Error enviando comando: {e}", "ERROR")
 
+# --- Funciones de Interfaz de Usuario ---
 def show_device_status():
     global DEVICE_ID
     """Mostrar estado actual del dispositivo"""
@@ -166,10 +161,10 @@ def show_device_status():
     print("📱 ESTADO DEL DISPOSITIVO AGROPAPIN")
     print("="*50)
     print(f"Dispositivo: {device_data.get('device_id', DEVICE_ID)}")
-    print(f"Online: {'✅ SÍ' if device_data['status'] else '❌ NO'}")
-    print(f"Riego: {'🟢 ACTIVO' if device_data['relay_state'] else '🔴 INACTIVO'}")
+    print(f"Online: {'✅ SÍ' if device_data.get('status') else '❌ NO'}")
+    print(f"Riego: {'🟢 ACTIVO' if device_data.get('relay_state') else '🔴 INACTIVO'}")
     
-    if device_data['last_seen']:
+    if device_data.get('last_seen'):
         print(f"Última vez visto: {device_data['last_seen'].strftime('%H:%M:%S')}")
     
     print("="*50)
@@ -206,16 +201,12 @@ def interactive_menu():
             
             if choice == "1":
                 send_command("irrigate")
-                
             elif choice == "2":
                 send_command("stop")
-                
             elif choice == "3":
                 show_device_status()
-                
             elif choice == "4":
                 show_telemetry()
-
             elif choice == "5":
                 log("Cerrando aplicación...")
                 break
@@ -228,38 +219,44 @@ def interactive_menu():
         except Exception as e:
             log(f"Error: {e}", "ERROR")
 
+# --- Función Principal ---
 def main():
-    """Función principal"""
-    global client
+    """Función principal que maneja ambas conexiones"""
+    global client1, client2
+
+    client1 = mqtt.Client(client_id="edge-app-main")
+    client1.on_connect = on_connect_broker1
+    client1.on_message = on_message_broker1
+
+    client2 = mqtt.Client(client_id="edge-app-irrigation")
+    client2.on_connect = on_connect_broker2
+    client2.on_message = on_message_broker2
     
     log("Iniciando AgroPapin Edge App (Python)")
-    log(f"Conectando a MQTT Broker: {MQTT_BROKER}:{MQTT_PORT}")
-    
-    # Configurar cliente MQTT
-    client = mqtt.Client()
-    client.on_connect = on_connect
-    client.on_message = on_message
     
     try:
-        # Conectar al broker
-        client.connect(MQTT_BROKER, MQTT_PORT, 60)
+        log(f"Conectando a Broker 1 (Telemetría): {MQTT_BROKER}:{MQTT_PORT}")
+        client1.connect(MQTT_BROKER, MQTT_PORT, 60)
+
+        log(f"Conectando a Broker 2 (Riego): {IRRIGATION_BROKER}:{MQTT_PORT}")
+        client2.connect(IRRIGATION_BROKER, MQTT_PORT, 60)
         
-        # Iniciar loop de MQTT en hilo separado
-        client.loop_start()
+        client1.loop_start()
+        client2.loop_start()
         
-        # Esperar un poco para establecer conexión
-        time.sleep(2)
-        
-        # Iniciar menú interactivo
         interactive_menu()
         
     except Exception as e:
         log(f"Error fatal: {e}", "ERROR")
         
     finally:
-        client.loop_stop()
-        client.disconnect()
-        log("Aplicación terminada")
+        if client1:
+            client1.loop_stop()
+            client1.disconnect()
+        if client2:
+            client2.loop_stop()
+            client2.disconnect()
+        log("Ambas conexiones MQTT cerradas. Aplicación terminada.")
 
 if __name__ == "__main__":
     main()
