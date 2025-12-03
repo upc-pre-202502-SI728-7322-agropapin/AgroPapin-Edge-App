@@ -231,7 +231,7 @@ def main():
     client1.on_connect = on_connect_broker1
     client1.on_message = on_message_broker1
 
-    client2 = mqtt.Client(client_id="edge-app-irrigation")
+    client2 = mqtt.Client(client_id="edge_node_lola_1")
     client2.on_connect = on_connect_broker2
     client2.on_message = on_message_broker2
 
@@ -245,8 +245,8 @@ def main():
         log(f"Conectando a Broker 1 (Telemetría): {MQTT_BROKER}:{MQTT_PORT}")
         client1.connect(MQTT_BROKER, MQTT_PORT, 60)
 
-        log(f"Conectando a Broker 2 (Riego): {IRRIGATION_BROKER}:{MQTT_PORT}")
-        client2.connect(IRRIGATION_BROKER, MQTT_PORT, 60)
+        log(f"Conectando a Broker 2 (Riego): {IRRIGATION_BROKER}:{IRRIGATION_PORT}")
+        client2.connect(IRRIGATION_BROKER, IRRIGATION_PORT, 60)
         
         client1.loop_start()
         client2.loop_start()
