@@ -13,9 +13,12 @@ TOPIC_STATUS = f"{MQTT_SERVER}/status"
 TOPIC_COMMANDS = f"{MQTT_SERVER}/commands"
 TOPIC_TELEMETRY = f"{MQTT_SERVER}/telemetry"
 
-# --- Broker y Topic para Riego ---
-IRRIGATION_BROKER = "38.253.147.228" # O la IP de tu otro broker
-TOPIC_IRRIGATION = "command/irrigation/d1ff4b71-1cd0-4fc0-b0d2-d4e5b5825fba"
+# --- Broker y Topic para Riego (HiveMQ Cloud) ---
+IRRIGATION_BROKER = "3cff9113c83a47a5b96cc332a6dd800b.s1.eu.hivemq.cloud"
+IRRIGATION_PORT = 8883
+IRRIGATION_USER = "edge_node_lola_1"
+IRRIGATION_PASSWORD = "EdgeLolaPassword12Lola21"
+TOPIC_IRRIGATION = "command/irrigation/f9d76d96-5fa3-450e-a062-a9e625c89430"
 
 # --- Variables Globales ---
 global DEVICE_ID
@@ -71,7 +74,7 @@ def on_message_broker1(client, userdata, msg):
             
         elif topic == TOPIC_TELEMETRY:
             device_data["timestamp"] = data.get("timestamp")
-            device_data["plot_id"] = "6bb0cf7a-a9b1-4878-8809-0eb74487cbe0"
+            device_data["plot_id"] = "50e3f110-8a15-454c-b354-256505b4e692"
             device_data["temperature"] = data.get("temperature")
             device_data["soil_moisture"] = data.get("soil_moisture")
             device_data["temperature_limit"] = data.get("temperature_limit")
@@ -84,7 +87,7 @@ def on_message_broker1(client, userdata, msg):
                 ts = device_data.get("timestamp") or int(time.time())
                 sample = {
                     "device_id": data.get("device_id", DEVICE_ID),
-                    "plot_id": "d31cc3bc-df79-4926-af6d-49555ab893be",
+                    "plot_id": "50e3f110-8a15-454c-b354-256505b4e692",
                     "timestamp": int(ts),
                     "humidity": ta._safe_float(data.get("humidity")),
                     "temperature": ta._safe_float(data.get("temperature")),
@@ -231,6 +234,10 @@ def main():
     client2 = mqtt.Client(client_id="edge-app-irrigation")
     client2.on_connect = on_connect_broker2
     client2.on_message = on_message_broker2
+
+    client2.username_pw_set(IRRIGATION_USER, IRRIGATION_PASSWORD)
+    
+    client2.tls_set()
     
     log("Iniciando AgroPapin Edge App (Python)")
     
